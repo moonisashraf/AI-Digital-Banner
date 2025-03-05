@@ -12,9 +12,9 @@ function App() {
   const transformerRef = useRef(null);
   const stageRef = useRef(null);
   const fileInputRef = useRef(null);
-  const [history, setHistory] = useState([{ elements: [], images: [] }]); // Initial state in history
-  const [historyIndex, setHistoryIndex] = useState(0); // Start at 0 with initial state
-  const debounceTimeout = useRef(null); // For debouncing color changes
+  const [history, setHistory] = useState([{ elements: [], images: [] }]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+  const debounceTimeout = useRef(null);
 
   useEffect(() => {
     const updateDimensions = () => {
@@ -44,7 +44,7 @@ function App() {
     newHistory.push({ elements: [...newElements], images: [...newImages] });
     setHistory(newHistory);
     setHistoryIndex(newHistory.length - 1);
-    console.log('Saved to history:', newHistory[newHistory.length - 1]); // Debug log
+    console.log('Saved to history:', newHistory[newHistory.length - 1]);
   };
 
   const handleImageUpload = (e) => {
@@ -196,7 +196,7 @@ function App() {
     }
     debounceTimeout.current = setTimeout(() => {
       saveToHistory(newElements, newImages);
-    }, 300); // 300ms debounce
+    }, 300);
   };
 
   const handleDelete = () => {
@@ -226,7 +226,7 @@ function App() {
         transformerRef.current.nodes([]);
         transformerRef.current.getLayer().batchDraw();
       }
-      console.log('Undo to:', prevState); // Debug log
+      console.log('Undo to:', prevState);
     }
   };
 
@@ -241,7 +241,7 @@ function App() {
         transformerRef.current.nodes([]);
         transformerRef.current.getLayer().batchDraw();
       }
-      console.log('Redo to:', nextState); // Debug log
+      console.log('Redo to:', nextState);
     }
   };
 
@@ -281,7 +281,21 @@ function App() {
             } else if (el.type === 'circle') {
               return `<div class="element" style="left: ${el.x}px; top: ${el.y}px; width: ${el.radius * 2}px; height: ${el.radius * 2}px; background: ${el.fill}; border: 1px solid ${el.stroke || 'black'}; border-radius: 50%;"></div>`;
             } else if (el.type === 'line') {
-              return `<svg class="element" style="left: ${el.x}px; top: ${el.y}px;" width="100" height="100"><polygon points="${el.points.join(' ')}" style="fill: ${el.fill}; stroke: ${el.stroke || 'black'}; stroke-width: 1;" /></svg>`;
+              // Calculate the bounding box of the triangle points
+              const points = el.points;
+              let minX = Math.min(points[0], points[2], points[4]);
+              let maxX = Math.max(points[0], points[2], points[4]);
+              let minY = Math.min(points[1], points[3], points[5]);
+              let maxY = Math.max(points[1], points[3], points[5]);
+              const width = maxX - minX;
+              const height = maxY - minY;
+
+              // Adjust points relative to the bounding box origin
+              const adjustedPoints = points.map((p, i) => 
+                i % 2 === 0 ? p - minX : p - minY
+              ).join(' ');
+
+              return `<svg class="element" style="left: ${el.x + minX}px; top: ${el.y + minY}px; width: ${width}px; height: ${height}px;" viewBox="0 0 ${width} ${height}"><polygon points="${adjustedPoints}" style="fill: ${el.fill}; stroke: ${el.stroke || 'black'}; stroke-width: 1;" /></svg>`;
             }
             return '';
           }).join('')}
