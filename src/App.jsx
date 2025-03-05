@@ -12,8 +12,9 @@ function App() {
   const transformerRef = useRef(null);
   const stageRef = useRef(null);
   const fileInputRef = useRef(null);
-  const [history, setHistory] = useState([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [history, setHistory] = useState([{ elements: [], images: [] }]); // Initial state in history
+  const [historyIndex, setHistoryIndex] = useState(0); // Start at 0 with initial state
+  const debounceTimeout = useRef(null); // For debouncing color changes
 
   useEffect(() => {
     const updateDimensions = () => {
@@ -43,6 +44,7 @@ function App() {
     newHistory.push({ elements: [...newElements], images: [...newImages] });
     setHistory(newHistory);
     setHistoryIndex(newHistory.length - 1);
+    console.log('Saved to history:', newHistory[newHistory.length - 1]); // Debug log
   };
 
   const handleImageUpload = (e) => {
@@ -185,7 +187,16 @@ function App() {
         node.getLayer().batchDraw();
       }
     }
-    saveToHistory(isImage ? elements : updatedArray, isImage ? updatedArray : images);
+    return updatedArray;
+  };
+
+  const debounceSaveHistory = (newElements, newImages) => {
+    if (debounceTimeout.current) {
+      clearTimeout(debounceTimeout.current);
+    }
+    debounceTimeout.current = setTimeout(() => {
+      saveToHistory(newElements, newImages);
+    }, 300); // 300ms debounce
   };
 
   const handleDelete = () => {
@@ -215,6 +226,7 @@ function App() {
         transformerRef.current.nodes([]);
         transformerRef.current.getLayer().batchDraw();
       }
+      console.log('Undo to:', prevState); // Debug log
     }
   };
 
@@ -229,6 +241,7 @@ function App() {
         transformerRef.current.nodes([]);
         transformerRef.current.getLayer().batchDraw();
       }
+      console.log('Redo to:', nextState); // Debug log
     }
   };
 
@@ -267,7 +280,7 @@ function App() {
               return `<div class="element" style="left: ${el.x}px; top: ${el.y}px; width: ${el.width}px; height: ${el.height}px; background: ${el.fill}; border: 1px solid ${el.stroke || 'black'};"></div>`;
             } else if (el.type === 'circle') {
               return `<div class="element" style="left: ${el.x}px; top: ${el.y}px; width: ${el.radius * 2}px; height: ${el.radius * 2}px; background: ${el.fill}; border: 1px solid ${el.stroke || 'black'}; border-radius: 50%;"></div>`;
-            } else if (el.type === 'line') { // Triangle
+            } else if (el.type === 'line') {
               return `<svg class="element" style="left: ${el.x}px; top: ${el.y}px;" width="100" height="100"><polygon points="${el.points.join(' ')}" style="fill: ${el.fill}; stroke: ${el.stroke || 'black'}; stroke-width: 1;" /></svg>`;
             }
             return '';
@@ -473,7 +486,11 @@ function App() {
                 <span className="text-sm sm:text-base">Fill Color</span>
                 <input
                   type="color"
-                  onChange={(e) => handlePropertyChange('fill', e.target.value)}
+                  defaultValue={elements.find((el) => String(el.id) === selectedId)?.fill || '#000000'}
+                  onChange={(e) => {
+                    const updatedArray = handlePropertyChange('fill', e.target.value);
+                    debounceSaveHistory(updatedArray, images);
+                  }}
                   className="mt-1 w-full"
                 />
               </label>
@@ -485,7 +502,10 @@ function App() {
                   type="number"
                   min="10"
                   defaultValue={elements.find((el) => String(el.id) === selectedId)?.fontSize || 20}
-                  onChange={(e) => handlePropertyChange('fontSize', Number(e.target.value))}
+                  onChange={(e) => {
+                    const updatedArray = handlePropertyChange('fontSize', Number(e.target.value));
+                    saveToHistory(updatedArray, images);
+                  }}
                   className="mt-1 w-full p-1"
                 />
               </label>
