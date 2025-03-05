@@ -11,7 +11,9 @@ function App() {
   const [stageHeight, setStageHeight] = useState(0);
   const transformerRef = useRef(null);
   const stageRef = useRef(null);
-  const fileInputRef = useRef(null); // Ref for the file input
+  const fileInputRef = useRef(null);
+  const [history, setHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   useEffect(() => {
     const updateDimensions = () => {
@@ -26,6 +28,23 @@ function App() {
     return () => window.removeEventListener('resize', updateDimensions);
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Delete' && selectedId) handleDelete();
+      if (e.ctrlKey && e.key === 'z') handleUndo();
+      if (e.ctrlKey && e.key === 'y') handleRedo();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedId, historyIndex]);
+
+  const saveToHistory = (newElements, newImages) => {
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push({ elements: [...newElements], images: [...newImages] });
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+  };
+
   const handleImageUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file || !file.type.startsWith('image/')) {
@@ -37,14 +56,18 @@ function App() {
       const img = new window.Image();
       img.src = event.target.result;
       img.onload = () => {
-        setImages([...images, { id: Date.now(), src: img.src, x: 50, y: 50, width: 100, height: 100, imageObj: img }]);
+        const newImages = [...images, { id: Date.now(), src: img.src, x: 50, y: 50, width: 100, height: 100, imageObj: img }];
+        setImages(newImages);
+        saveToHistory(elements, newImages);
       };
     };
     reader.readAsDataURL(file);
   };
 
   const addText = () => {
-    setElements([...elements, { id: Date.now(), type: 'text', x: 50, y: 50, text: 'New Text', fontSize: 20, fill: 'black' }]);
+    const newElements = [...elements, { id: Date.now(), type: 'text', x: 50, y: 50, text: 'New Text', fontSize: 20, fill: 'black' }];
+    setElements(newElements);
+    saveToHistory(newElements, images);
   };
 
   const addShape = (shapeType) => {
@@ -62,7 +85,9 @@ function App() {
       default:
         return;
     }
-    setElements([...elements, newShape]);
+    const newElements = [...elements, newShape];
+    setElements(newElements);
+    saveToHistory(newElements, images);
   };
 
   const suggestText = () => {
@@ -89,16 +114,17 @@ function App() {
 
   const handleDragEnd = (e, id, type) => {
     const newElements = type === 'image' ? [...images] : [...elements];
-    const index = type === 'image' ? images.findIndex((img) => img.id === id) : elements.findIndex((el) => el.id === id);
+    const index = type === 'image' ? images.findIndex((img) => String(img.id) === id) : elements.findIndex((el) => String(el.id) === id);
     newElements[index].x = e.target.x();
     newElements[index].y = e.target.y();
     type === 'image' ? setImages(newElements) : setElements(newElements);
+    saveToHistory(type === 'image' ? elements : newElements, type === 'image' ? newElements : images);
   };
 
   const handleTransformEnd = (e, id, type) => {
     const node = e.target;
     const newElements = type === 'image' ? [...images] : [...elements];
-    const index = type === 'image' ? images.findIndex((img) => img.id === id) : elements.findIndex((el) => el.id === id);
+    const index = type === 'image' ? images.findIndex((img) => String(img.id) === id) : elements.findIndex((el) => String(el.id) === id);
 
     if (type === 'rect' || type === 'image') {
       newElements[index].width = Math.abs(node.width() * node.scaleX());
@@ -121,6 +147,7 @@ function App() {
 
     type === 'image' ? setImages(newElements) : setElements(newElements);
     node.getLayer().batchDraw();
+    saveToHistory(type === 'image' ? elements : newElements, type === 'image' ? newElements : images);
   };
 
   const handleStageClick = (e) => {
@@ -133,11 +160,132 @@ function App() {
     }
   };
 
-  // Function to trigger file input click
   const handleAddImageClick = () => {
     if (fileInputRef.current) {
-      fileInputRef.current.click(); // Programmatically trigger the file input
+      fileInputRef.current.click();
     }
+  };
+
+  const handlePropertyChange = (key, value) => {
+    const isImage = images.some((img) => String(img.id) === selectedId);
+    const arrayToUpdate = isImage ? images : elements;
+    const setter = isImage ? setImages : setElements;
+
+    if (isImage && key === 'fill') return;
+
+    const updatedArray = arrayToUpdate.map((el) =>
+      String(el.id) === selectedId ? { ...el, [key]: value } : el
+    );
+    setter(updatedArray);
+
+    if (stageRef.current) {
+      const node = stageRef.current.findOne(`#${selectedId}`);
+      if (node) {
+        node.setAttr(key, value);
+        node.getLayer().batchDraw();
+      }
+    }
+    saveToHistory(isImage ? elements : updatedArray, isImage ? updatedArray : images);
+  };
+
+  const handleDelete = () => {
+    const isImage = images.some((img) => String(img.id) === selectedId);
+    const arrayToUpdate = isImage ? images : elements;
+    const setter = isImage ? setImages : setElements;
+
+    const updatedArray = arrayToUpdate.filter((el) => String(el.id) !== selectedId);
+    setter(updatedArray);
+    setSelectedId(null);
+
+    if (transformerRef.current) {
+      transformerRef.current.nodes([]);
+      transformerRef.current.getLayer().batchDraw();
+    }
+    saveToHistory(isImage ? elements : updatedArray, isImage ? updatedArray : images);
+  };
+
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const prevState = history[historyIndex - 1];
+      setElements(prevState.elements);
+      setImages(prevState.images);
+      setHistoryIndex(historyIndex - 1);
+      setSelectedId(null);
+      if (transformerRef.current) {
+        transformerRef.current.nodes([]);
+        transformerRef.current.getLayer().batchDraw();
+      }
+    }
+  };
+
+  const handleRedo = () => {
+    if (historyIndex < history.length - 1) {
+      const nextState = history[historyIndex + 1];
+      setElements(nextState.elements);
+      setImages(nextState.images);
+      setHistoryIndex(historyIndex + 1);
+      setSelectedId(null);
+      if (transformerRef.current) {
+        transformerRef.current.nodes([]);
+        transformerRef.current.getLayer().batchDraw();
+      }
+    }
+  };
+
+  const handleExportPNG = () => {
+    if (stageRef.current) {
+      const dataURL = stageRef.current.toDataURL({ mimeType: 'image/png', quality: 1 });
+      const link = document.createElement('a');
+      link.download = 'banner-design.png';
+      link.href = dataURL;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const handleExportHTML = () => {
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Banner Design</title>
+        <style>
+          body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #fff; }
+          #banner { position: relative; width: ${stageWidth}px; height: ${stageHeight}px; border: 1px solid #000; overflow: hidden; }
+          .element { position: absolute; }
+        </style>
+      </head>
+      <body>
+        <div id="banner">
+          ${elements.map(el => {
+            if (el.type === 'text') {
+              return `<div class="element" style="left: ${el.x}px; top: ${el.y}px; font-size: ${el.fontSize || 20}px; color: ${el.fill || 'black'};">${el.text}</div>`;
+            } else if (el.type === 'rect') {
+              return `<div class="element" style="left: ${el.x}px; top: ${el.y}px; width: ${el.width}px; height: ${el.height}px; background: ${el.fill}; border: 1px solid ${el.stroke || 'black'};"></div>`;
+            } else if (el.type === 'circle') {
+              return `<div class="element" style="left: ${el.x}px; top: ${el.y}px; width: ${el.radius * 2}px; height: ${el.radius * 2}px; background: ${el.fill}; border: 1px solid ${el.stroke || 'black'}; border-radius: 50%;"></div>`;
+            } else if (el.type === 'line') { // Triangle
+              return `<svg class="element" style="left: ${el.x}px; top: ${el.y}px;" width="100" height="100"><polygon points="${el.points.join(' ')}" style="fill: ${el.fill}; stroke: ${el.stroke || 'black'}; stroke-width: 1;" /></svg>`;
+            }
+            return '';
+          }).join('')}
+          ${images.map(img => {
+            return `<img class="element" src="${img.src}" style="left: ${img.x}px; top: ${img.y}px; width: ${img.width}px; height: ${img.height}px;" />`;
+          }).join('')}
+        </div>
+      </body>
+      </html>
+    `;
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const link = document.createElement('a');
+    link.download = 'banner-design.html';
+    link.href = URL.createObjectURL(blob);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -160,6 +308,32 @@ function App() {
             Add Triangle
           </button>
         </div>
+        <button
+          onClick={handleUndo}
+          disabled={historyIndex <= 0}
+          className="bg-gray-500 text-white p-1 sm:p-2 rounded hover:bg-gray-600 text-sm sm:text-base disabled:opacity-50"
+        >
+          Undo
+        </button>
+        <button
+          onClick={handleRedo}
+          disabled={historyIndex >= history.length - 1}
+          className="bg-gray-500 text-white p-1 sm:p-2 rounded hover:bg-gray-600 text-sm sm:text-base disabled:opacity-50"
+        >
+          Redo
+        </button>
+        <button
+          onClick={handleExportPNG}
+          className="bg-green-500 text-white p-1 sm:p-2 rounded hover:bg-green-600 text-sm sm:text-base"
+        >
+          Export as PNG
+        </button>
+        <button
+          onClick={handleExportHTML}
+          className="bg-green-500 text-white p-1 sm:p-2 rounded hover:bg-green-600 text-sm sm:text-base"
+        >
+          Export as HTML
+        </button>
       </div>
 
       <div ref={containerRef} className="flex-1 bg-white border overflow-hidden p-2 sm:p-4">
@@ -182,11 +356,13 @@ function App() {
                     fontSize={el.fontSize || 20}
                     fill={el.fill || 'black'}
                     draggable
-                    onDragEnd={(e) => handleDragEnd(e, el.id, 'element')}
+                    onDragEnd={(e) => handleDragEnd(e, String(el.id), 'element')}
                     onDblClick={() => {
                       const newText = prompt('Edit text:', el.text);
                       if (newText) {
-                        setElements(elements.map((item) => (item.id === el.id ? { ...item, text: newText } : item)));
+                        const newElements = elements.map((item) => (String(item.id) === String(el.id) ? { ...item, text: newText } : item));
+                        setElements(newElements);
+                        saveToHistory(newElements, images);
                       }
                     }}
                     onClick={handleSelect}
@@ -202,8 +378,8 @@ function App() {
                     fill={el.fill}
                     stroke={el.stroke}
                     draggable
-                    onDragEnd={(e) => handleDragEnd(e, el.id, 'element')}
-                    onTransformEnd={(e) => handleTransformEnd(e, el.id, 'rect')}
+                    onDragEnd={(e) => handleDragEnd(e, String(el.id), 'element')}
+                    onTransformEnd={(e) => handleTransformEnd(e, String(el.id), 'rect')}
                     onClick={handleSelect}
                     onTap={handleSelect}
                   />
@@ -216,8 +392,8 @@ function App() {
                     fill={el.fill}
                     stroke={el.stroke}
                     draggable
-                    onDragEnd={(e) => handleDragEnd(e, el.id, 'element')}
-                    onTransformEnd={(e) => handleTransformEnd(e, el.id, 'circle')}
+                    onDragEnd={(e) => handleDragEnd(e, String(el.id), 'element')}
+                    onTransformEnd={(e) => handleTransformEnd(e, String(el.id), 'circle')}
                     onClick={handleSelect}
                     onTap={handleSelect}
                   />
@@ -231,8 +407,8 @@ function App() {
                     stroke={el.stroke}
                     closed={el.closed}
                     draggable
-                    onDragEnd={(e) => handleDragEnd(e, el.id, 'element')}
-                    onTransformEnd={(e) => handleTransformEnd(e, el.id, 'line')}
+                    onDragEnd={(e) => handleDragEnd(e, String(el.id), 'element')}
+                    onTransformEnd={(e) => handleTransformEnd(e, String(el.id), 'line')}
                     onClick={handleSelect}
                     onTap={handleSelect}
                   />
@@ -249,8 +425,8 @@ function App() {
                 width={img.width}
                 height={img.height}
                 draggable
-                onDragEnd={(e) => handleDragEnd(e, img.id, 'image')}
-                onTransformEnd={(e) => handleTransformEnd(e, img.id, 'image')}
+                onDragEnd={(e) => handleDragEnd(e, String(img.id), 'image')}
+                onTransformEnd={(e) => handleTransformEnd(e, String(img.id), 'image')}
                 onClick={handleSelect}
                 onTap={handleSelect}
               />
@@ -278,10 +454,44 @@ function App() {
             accept="image/*"
             onChange={handleImageUpload}
             className="mt-1 p-1 sm:p-2 text-sm sm:text-base"
-            ref={fileInputRef} // Keep the ref for programmatic triggering
+            ref={fileInputRef}
           />
         </label>
         {suggestedText && <p className="mt-1 sm:mt-2 text-gray-700 text-sm sm:text-base">Suggestion: "{suggestedText}"</p>}
+
+        {selectedId && (
+          <div className="mt-4">
+            <h3 className="font-bold mb-2 text-sm sm:text-base">Properties</h3>
+            <button
+              onClick={handleDelete}
+              className="bg-red-500 text-white p-1 sm:p-2 rounded hover:bg-red-600 text-sm sm:text-base mb-2"
+            >
+              Delete
+            </button>
+            {!images.some((img) => String(img.id) === selectedId) && (
+              <label className="block mb-2">
+                <span className="text-sm sm:text-base">Fill Color</span>
+                <input
+                  type="color"
+                  onChange={(e) => handlePropertyChange('fill', e.target.value)}
+                  className="mt-1 w-full"
+                />
+              </label>
+            )}
+            {elements.find((el) => String(el.id) === selectedId)?.type === 'text' && (
+              <label className="block mb-2">
+                <span className="text-sm sm:text-base">Font Size</span>
+                <input
+                  type="number"
+                  min="10"
+                  defaultValue={elements.find((el) => String(el.id) === selectedId)?.fontSize || 20}
+                  onChange={(e) => handlePropertyChange('fontSize', Number(e.target.value))}
+                  className="mt-1 w-full p-1"
+                />
+              </label>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
