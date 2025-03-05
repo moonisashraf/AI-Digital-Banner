@@ -12,5 +12,8 @@ export default defineConfig({
   build: {
     outDir: 'dist', // Ensure the output directory is set
   },
+  preview: {
+    allowedHosts: ['ai-digital-banner.onrender.com'], // Allow the specified host
+  },
 })
 // ... existing code ...
