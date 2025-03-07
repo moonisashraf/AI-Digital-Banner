@@ -1,9 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Stage, Layer, Rect, Text, Circle, Line, Image, Transformer } from 'react-konva';
+import 'animate.css';
 
 function App() {
   const [elements, setElements] = useState([]);
   const [images, setImages] = useState([]);
+  // const [elements, setElements] = useState([]);
+  // const [images, setImages] = useState([]);
   const [suggestedText, setSuggestedText] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const containerRef = useRef(null);
@@ -58,7 +61,8 @@ function App() {
       const img = new window.Image();
       img.src = event.target.result;
       img.onload = () => {
-        const newImages = [...images, { id: Date.now(), src: img.src, x: 50, y: 50, width: 100, height: 100, imageObj: img }];
+        const newImages = [...images, { id: Date.now(), src: img.src, x: 50, y: 50, width: 100, height: 100, imageObj: img,
+          animation: { type: null, duration: 1, delay: 0, iteration: 1 } }];
         setImages(newImages);
         saveToHistory(elements, newImages);
       };
@@ -67,7 +71,8 @@ function App() {
   };
 
   const addText = () => {
-    const newElements = [...elements, { id: Date.now(), type: 'text', x: 50, y: 50, text: 'New Text', fontSize: 20, fill: 'black' }];
+    const newElements = [...elements, { id: Date.now(), type: 'text', x: 50, y: 50, text: 'New Text', fontSize: 20, fill: 'black',
+      animation: { type: null, duration: 1, delay: 0, iteration: 1 } }];
     setElements(newElements);
     saveToHistory(newElements, images);
   };
@@ -76,13 +81,13 @@ function App() {
     let newShape;
     switch (shapeType) {
       case 'rectangle':
-        newShape = { id: Date.now(), type: 'rect', x: 50, y: 50, width: 100, height: 50, fill: 'blue', stroke: 'black' };
+        newShape = { id: Date.now(), type: 'rect', x: 50, y: 50, width: 100, height: 50, fill: 'blue', stroke: 'black',animation: { type: null, duration: 1, delay: 0, iteration: 1 }, };
         break;
       case 'circle':
-        newShape = { id: Date.now(), type: 'circle', x: 50, y: 50, radius: 50, fill: 'red', stroke: 'black' };
+        newShape = { id: Date.now(), type: 'circle', x: 50, y: 50, radius: 50, fill: 'red', stroke: 'black',animation: { type: null, duration: 1, delay: 0, iteration: 1 }, };
         break;
       case 'triangle':
-        newShape = { id: Date.now(), type: 'line', points: [50, 0, 100, 100, 0, 100], x: 50, y: 50, fill: 'green', closed: true, stroke: 'black' };
+        newShape = { id: Date.now(), type: 'line', points: [50, 0, 100, 100, 0, 100], x: 50, y: 50, fill: 'green', closed: true, stroke: 'black',animation: { type: null, duration: 1, delay: 0, iteration: 1 }, };
         break;
       default:
         return;
@@ -265,6 +270,7 @@ function App() {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Banner Design</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
         <style>
           body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #fff; }
           #banner { position: relative; width: ${stageWidth}px; height: ${stageHeight}px; border: 1px solid #000; overflow: hidden; }
@@ -273,35 +279,43 @@ function App() {
       </head>
       <body>
         <div id="banner">
-          ${elements.map(el => {
-            if (el.type === 'text') {
-              return `<div class="element" style="left: ${el.x}px; top: ${el.y}px; font-size: ${el.fontSize || 20}px; color: ${el.fill || 'black'};">${el.text}</div>`;
-            } else if (el.type === 'rect') {
-              return `<div class="element" style="left: ${el.x}px; top: ${el.y}px; width: ${el.width}px; height: ${el.height}px; background: ${el.fill}; border: 1px solid ${el.stroke || 'black'};"></div>`;
-            } else if (el.type === 'circle') {
-              return `<div class="element" style="left: ${el.x}px; top: ${el.y}px; width: ${el.radius * 2}px; height: ${el.radius * 2}px; background: ${el.fill}; border: 1px solid ${el.stroke || 'black'}; border-radius: 50%;"></div>`;
-            } else if (el.type === 'line') {
-              // Calculate the bounding box of the triangle points
-              const points = el.points;
-              let minX = Math.min(points[0], points[2], points[4]);
-              let maxX = Math.max(points[0], points[2], points[4]);
-              let minY = Math.min(points[1], points[3], points[5]);
-              let maxY = Math.max(points[1], points[3], points[5]);
-              const width = maxX - minX;
-              const height = maxY - minY;
-
-              // Adjust points relative to the bounding box origin
-              const adjustedPoints = points.map((p, i) => 
-                i % 2 === 0 ? p - minX : p - minY
-              ).join(' ');
-
-              return `<svg class="element" style="left: ${el.x + minX}px; top: ${el.y + minY}px; width: ${width}px; height: ${height}px;" viewBox="0 0 ${width} ${height}"><polygon points="${adjustedPoints}" style="fill: ${el.fill}; stroke: ${el.stroke || 'black'}; stroke-width: 1;" /></svg>`;
-            }
-            return '';
-          }).join('')}
-          ${images.map(img => {
-            return `<img class="element" src="${img.src}" style="left: ${img.x}px; top: ${img.y}px; width: ${img.width}px; height: ${img.height}px;" />`;
-          }).join('')}
+          ${elements
+            .map((el) => {
+              const animationClass = el.animation?.type ? `${el.animation.type} animate__animated` : '';
+              const animationStyle = el.animation?.type
+                ? `animation-duration: ${el.animation.duration}s; animation-delay: ${el.animation.delay}s; animation-iteration-count: ${el.animation.iteration};`
+                : '';
+              if (el.type === 'text') {
+                return `<div class="element ${animationClass}" style="left: ${el.x}px; top: ${el.y}px; font-size: ${el.fontSize || 20}px; color: ${el.fill || 'black'}; ${animationStyle}">${el.text}</div>`;
+              } else if (el.type === 'rect') {
+                return `<div class="element ${animationClass}" style="left: ${el.x}px; top: ${el.y}px; width: ${el.width}px; height: ${el.height}px; background: ${el.fill}; border: 1px solid ${el.stroke || 'black'}; ${animationStyle}"></div>`;
+              } else if (el.type === 'circle') {
+                return `<div class="element ${animationClass}" style="left: ${el.x}px; top: ${el.y}px; width: ${el.radius * 2}px; height: ${el.radius * 2}px; background: ${el.fill}; border: 1px solid ${el.stroke || 'black'}; border-radius: 50%; ${animationStyle}"></div>`;
+              } else if (el.type === 'line') {
+                const points = el.points;
+                let minX = Math.min(points[0], points[2], points[4]);
+                let maxX = Math.max(points[0], points[2], points[4]);
+                let minY = Math.min(points[1], points[3], points[5]);
+                let maxY = Math.max(points[1], points[3], points[5]);
+                const width = maxX - minX;
+                const height = maxY - minY;
+                const adjustedPoints = points
+                  .map((p, i) => (i % 2 === 0 ? p - minX : p - minY))
+                  .join(' ');
+                return `<svg class="element ${animationClass}" style="left: ${el.x + minX}px; top: ${el.y + minY}px; width: ${width}px; height: ${height}px; ${animationStyle}" viewBox="0 0 ${width} ${height}"><polygon points="${adjustedPoints}" style="fill: ${el.fill}; stroke: ${el.stroke || 'black'}; stroke-width: 1;" /></svg>`;
+              }
+              return '';
+            })
+            .join('')}
+          ${images
+            .map((img) => {
+              const animationClass = img.animation?.type ? `${img.animation.type} animate__animated` : '';
+              const animationStyle = img.animation?.type
+                ? `animation-duration: ${img.animation.duration}s; animation-delay: ${img.animation.delay}s; animation-iteration-count: ${img.animation.iteration};`
+                : '';
+              return `<img class="element ${animationClass}" src="${img.src}" style="left: ${img.x}px; top: ${img.y}px; width: ${img.width}px; height: ${img.height}px; ${animationStyle}" />`;
+            })
+            .join('')}
         </div>
       </body>
       </html>
@@ -314,6 +328,24 @@ function App() {
     link.click();
     document.body.removeChild(link);
   };
+
+  useEffect(() => {
+    elements.forEach((el) => {
+      const node = stageRef.current.findOne(`#${el.id}`);
+      if (node && el.animation?.type) {
+        // For preview, we could use Konva.Tween or custom logic, but Animate.css will shine in export
+        node.cache(); // Optional: Improve performance for animations
+        node.getLayer().batchDraw();
+      }
+    });
+    images.forEach((img) => {
+      const node = stageRef.current.findOne(`#${img.id}`);
+      if (node && img.animation?.type) {
+        node.cache();
+        node.getLayer().batchDraw();
+      }
+    });
+  }, [elements, images]);
 
   return (
     <div className="flex flex-col lg:flex-row h-screen w-full overflow-x-hidden bg-white">
@@ -524,6 +556,123 @@ function App() {
                 />
               </label>
             )}
+
+            {/* New Animation Section */}
+            <div className="mt-4">
+              <h3 className="font-bold mb-2 text-sm sm:text-base">Animation</h3>
+              <label className="block mb-2">
+                <span className="text-sm sm:text-base">Animation Type</span>
+                <select
+                  value={
+                    (elements.find((el) => String(el.id) === selectedId)?.animation?.type ||
+                    images.find((img) => String(img.id) === selectedId)?.animation?.type) || ''
+                  }
+                  onChange={(e) => {
+                    const isImage = images.some((img) => String(img.id) === selectedId);
+                    const updatedArray = handlePropertyChange('animation', {
+                      ...(isImage
+                        ? images.find((img) => String(img.id) === selectedId)?.animation
+                        : elements.find((el) => String(el.id) === selectedId)?.animation),
+                      type: e.target.value || null,
+                    });
+                    debounceSaveHistory(isImage ? elements : updatedArray, isImage ? updatedArray : images);
+                  }}
+                  className="mt-1 w-full p-1 text-sm sm:text-base"
+                >
+                  <option value="">None</option>
+                  <option value="animate__fadeIn">Fade In</option>
+                  <option value="animate__bounce">Bounce</option>
+                  <option value="animate__slideInLeft">Slide In Left</option>
+                  <option value="animate__zoomIn">Zoom In</option>
+                  {/* Add more Animate.css options as needed */}
+                </select>
+              </label>
+              <label className="block mb-2">
+                <span className="text-sm sm:text-base">Duration (s)</span>
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  defaultValue={
+                    (elements.find((el) => String(el.id) === selectedId)?.animation?.duration ||
+                    images.find((img) => String(img.id) === selectedId)?.animation?.duration) || 1
+                  }
+                  onChange={(e) => {
+                    const isImage = images.some((img) => String(img.id) === selectedId);
+                    const updatedArray = handlePropertyChange('animation', {
+                      ...(isImage
+                        ? images.find((img) => String(img.id) === selectedId)?.animation
+                        : elements.find((el) => String(el.id) === selectedId)?.animation),
+                      duration: Number(e.target.value),
+                    });
+                    debounceSaveHistory(isImage ? elements : updatedArray, isImage ? updatedArray : images);
+                  }}
+                  className="mt-1 w-full p-1"
+                />
+              </label>
+              <label className="block mb-2">
+                <span className="text-sm sm:text-base">Delay (s)</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  defaultValue={
+                    (elements.find((el) => String(el.id) === selectedId)?.animation?.delay ||
+                    images.find((img) => String(img.id) === selectedId)?.animation?.delay) || 0
+                  }
+                  onChange={(e) => {
+                    const isImage = images.some((img) => String(img.id) === selectedId);
+                    const updatedArray = handlePropertyChange('animation', {
+                      ...(isImage
+                        ? images.find((img) => String(img.id) === selectedId)?.animation
+                        : elements.find((el) => String(el.id) === selectedId)?.animation),
+                      delay: Number(e.target.value),
+                    });
+                    debounceSaveHistory(isImage ? elements : updatedArray, isImage ? updatedArray : images);
+                  }}
+                  className="mt-1 w-full p-1"
+                />
+              </label>
+              <label className="block mb-2">
+                <span className="text-sm sm:text-base">Iterations</span>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    defaultValue={
+                      (elements.find((el) => String(el.id) === selectedId)?.animation?.iteration ||
+                      images.find((img) => String(img.id) === selectedId)?.animation?.iteration) || 1
+                    }
+                    onChange={(e) => {
+                      const isImage = images.some((img) => String(img.id) === selectedId);
+                      const updatedArray = handlePropertyChange('animation', {
+                        ...(isImage
+                          ? images.find((img) => String(img.id) === selectedId)?.animation
+                          : elements.find((el) => String(el.id) === selectedId)?.animation),
+                        iteration: Number(e.target.value),
+                      });
+                      debounceSaveHistory(isImage ? elements : updatedArray, isImage ? updatedArray : images);
+                    }}
+                    className="mt-1 w-full p-1"
+                  />
+                  <button
+                    onClick={() => {
+                      const isImage = images.some((img) => String(img.id) === selectedId);
+                      const updatedArray = handlePropertyChange('animation', {
+                        ...(isImage
+                          ? images.find((img) => String(img.id) === selectedId)?.animation
+                          : elements.find((el) => String(el.id) === selectedId)?.animation),
+                        iteration: 'infinite',
+                      });
+                      debounceSaveHistory(isImage ? elements : updatedArray, isImage ? updatedArray : images);
+                    }}
+                    className="mt-1 bg-blue-500 text-white p-1 rounded hover:bg-blue-600 text-sm"
+                  >
+                    Infinite
+                  </button>
+                </div>
+              </label>
+            </div>
           </div>
         )}
       </div>
