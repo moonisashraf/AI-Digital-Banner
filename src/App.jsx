@@ -2,11 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Stage, Layer, Rect, Text, Circle, Line, Image, Transformer } from 'react-konva';
 import 'animate.css';
 
+
 function App() {
   const [elements, setElements] = useState([]);
   const [images, setImages] = useState([]);
-  // const [elements, setElements] = useState([]);
-  // const [images, setImages] = useState([]);
   const [suggestedText, setSuggestedText] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const containerRef = useRef(null);
@@ -18,19 +17,21 @@ function App() {
   const [history, setHistory] = useState([{ elements: [], images: [] }]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const debounceTimeout = useRef(null);
+  const [bannerSize, setBannerSize] = useState({ width: 600, height: 400 });
+  const [showBorder, setShowBorder] = useState(true);
 
   useEffect(() => {
     const updateDimensions = () => {
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect();
         setStageWidth(rect.width);
-        setStageHeight(rect.height || Math.min(window.innerHeight, 600));
+        setStageHeight(bannerSize.height);
       }
     };
     updateDimensions();
     window.addEventListener('resize', updateDimensions);
     return () => window.removeEventListener('resize', updateDimensions);
-  }, []);
+  }, [bannerSize]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -61,8 +62,32 @@ function App() {
       const img = new window.Image();
       img.src = event.target.result;
       img.onload = () => {
-        const newImages = [...images, { id: Date.now(), src: img.src, x: 50, y: 50, width: 100, height: 100, imageObj: img,
-          animation: { type: null, duration: 1, delay: 0, iteration: 1 } }];
+        // Calculate size to fit within banner with 20px padding
+        const maxWidth = bannerSize.width - 40;
+        const maxHeight = bannerSize.height - 40;
+        const aspectRatio = img.width / img.height;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          width = maxWidth;
+          height = width / aspectRatio;
+        }
+        if (height > maxHeight) {
+          height = maxHeight;
+          width = height * aspectRatio;
+        }
+
+        const newImages = [...images, { 
+          id: Date.now(), 
+          src: img.src, 
+          x: 20, 
+          y: 20, 
+          width, 
+          height, 
+          imageObj: img,
+          animation: { type: null, duration: 1, delay: 0, iteration: 1 }
+        }];
         setImages(newImages);
         saveToHistory(elements, newImages);
       };
@@ -81,13 +106,39 @@ function App() {
     let newShape;
     switch (shapeType) {
       case 'rectangle':
-        newShape = { id: Date.now(), type: 'rect', x: 50, y: 50, width: 100, height: 50, fill: 'blue', stroke: 'black',animation: { type: null, duration: 1, delay: 0, iteration: 1 }, };
+        newShape = { 
+          id: Date.now(), 
+          type: 'rect', 
+          x: 20, 
+          y: 20, 
+          width: 100, 
+          height: 50, 
+          fill: 'blue',
+          animation: { type: null, duration: 1, delay: 0, iteration: 1 }
+        };
         break;
       case 'circle':
-        newShape = { id: Date.now(), type: 'circle', x: 50, y: 50, radius: 50, fill: 'red', stroke: 'black',animation: { type: null, duration: 1, delay: 0, iteration: 1 }, };
+        newShape = { 
+          id: Date.now(), 
+          type: 'circle', 
+          x: 70, 
+          y: 70, 
+          radius: 50, 
+          fill: 'red',
+          animation: { type: null, duration: 1, delay: 0, iteration: 1 }
+        };
         break;
       case 'triangle':
-        newShape = { id: Date.now(), type: 'line', points: [50, 0, 100, 100, 0, 100], x: 50, y: 50, fill: 'green', closed: true, stroke: 'black',animation: { type: null, duration: 1, delay: 0, iteration: 1 }, };
+        newShape = { 
+          id: Date.now(), 
+          type: 'line', 
+          points: [50, 0, 100, 100, 0, 100], 
+          x: 20, 
+          y: 20, 
+          fill: 'green', 
+          closed: true,
+          animation: { type: null, duration: 1, delay: 0, iteration: 1 }
+        };
         break;
       default:
         return;
@@ -133,21 +184,31 @@ function App() {
     const newElements = type === 'image' ? [...images] : [...elements];
     const index = type === 'image' ? images.findIndex((img) => String(img.id) === id) : elements.findIndex((el) => String(el.id) === id);
 
-    if (type === 'rect' || type === 'image') {
+    if (type === 'text') {
+      // Adjust font size instead of scaling
+      const scaleX = node.scaleX();
+      const newFontSize = Math.round((newElements[index].fontSize || 20) * scaleX);
+      newElements[index].fontSize = newFontSize;
+      newElements[index].x = node.x();
+      newElements[index].y = node.y();
+    } else if (type === 'rect' || type === 'image') {
       newElements[index].width = Math.abs(node.width() * node.scaleX());
       newElements[index].height = Math.abs(node.height() * node.scaleY());
+      newElements[index].x = node.x();
+      newElements[index].y = node.y();
     } else if (type === 'circle') {
       newElements[index].radius = Math.abs(node.radius() * node.scaleX());
+      newElements[index].x = node.x();
+      newElements[index].y = node.y();
     } else if (type === 'line') {
       const scaleX = node.scaleX();
       const scaleY = node.scaleY();
       newElements[index].points = newElements[index].points.map((p, i) =>
         i % 2 === 0 ? p * scaleX : p * scaleY
       );
+      newElements[index].x = node.x();
+      newElements[index].y = node.y();
     }
-
-    newElements[index].x = node.x();
-    newElements[index].y = node.y();
 
     node.scaleX(1);
     node.scaleY(1);
@@ -350,6 +411,32 @@ function App() {
   return (
     <div className="flex flex-col lg:flex-row h-screen w-full overflow-x-hidden bg-white">
       <div className="w-full lg:w-52 bg-gray-200 p-2 sm:p-4 flex flex-col gap-2 sm:gap-4 flex-shrink-0">
+        <div className="flex flex-col gap-2">
+          <label className="text-sm sm:text-base">Banner Size</label>
+          <select 
+            value={`${bannerSize.width}x${bannerSize.height}`}
+            onChange={(e) => {
+              const [width, height] = e.target.value.split('x').map(Number);
+              setBannerSize({ width, height });
+              setStageWidth(width);
+              setStageHeight(height);
+            }}
+            className="p-1 rounded text-sm sm:text-base"
+          >
+            <option value="600x400">600x400</option>
+            <option value="800x600">800x600</option>
+            <option value="1200x300">1200x300</option>
+            <option value="300x250">300x250</option>
+          </select>
+          <label className="flex items-center gap-2 text-sm sm:text-base">
+            <input 
+              type="checkbox" 
+              checked={showBorder}
+              onChange={(e) => setShowBorder(e.target.checked)}
+            />
+            Show Border
+          </label>
+        </div>
         <button onClick={addText} className="bg-blue-500 text-white p-1 sm:p-2 rounded hover:bg-blue-600 text-sm sm:text-base">
           Add Text
         </button>
@@ -395,15 +482,24 @@ function App() {
         </button>
       </div>
 
-      <div ref={containerRef} className="flex-1 bg-white border overflow-hidden p-2 sm:p-4">
+      <div ref={containerRef} className="flex-1 bg-white overflow-hidden p-2 sm:p-4">
         <Stage
           ref={stageRef}
-          width={stageWidth || 600}
-          height={stageHeight || 400}
+          width={bannerSize.width}
+          height={bannerSize.height}
           onClick={handleStageClick}
           onTap={handleStageClick}
         >
           <Layer>
+            <Rect
+              x={0}
+              y={0}
+              width={bannerSize.width}
+              height={bannerSize.height}
+              fill="white"
+              stroke={showBorder ? '#cccccc' : null}
+              strokeWidth={showBorder ? 1 : 0}
+            />
             {elements.map((el) => (
               <React.Fragment key={el.id}>
                 {el.type === 'text' ? (
@@ -416,10 +512,13 @@ function App() {
                     fill={el.fill || 'black'}
                     draggable
                     onDragEnd={(e) => handleDragEnd(e, String(el.id), 'element')}
+                    onTransformEnd={(e) => handleTransformEnd(e, String(el.id), 'text')}
                     onDblClick={() => {
                       const newText = prompt('Edit text:', el.text);
                       if (newText) {
-                        const newElements = elements.map((item) => (String(item.id) === String(el.id) ? { ...item, text: newText } : item));
+                        const newElements = elements.map((item) => 
+                          String(item.id) === String(el.id) ? { ...item, text: newText } : item
+                        );
                         setElements(newElements);
                         saveToHistory(newElements, images);
                       }
@@ -435,7 +534,7 @@ function App() {
                     width={el.width}
                     height={el.height}
                     fill={el.fill}
-                    stroke={el.stroke}
+                    stroke={el.stroke || null}
                     draggable
                     onDragEnd={(e) => handleDragEnd(e, String(el.id), 'element')}
                     onTransformEnd={(e) => handleTransformEnd(e, String(el.id), 'rect')}
@@ -449,7 +548,7 @@ function App() {
                     y={el.y}
                     radius={el.radius}
                     fill={el.fill}
-                    stroke={el.stroke}
+                    stroke={el.stroke || null}
                     draggable
                     onDragEnd={(e) => handleDragEnd(e, String(el.id), 'element')}
                     onTransformEnd={(e) => handleTransformEnd(e, String(el.id), 'circle')}
@@ -463,7 +562,7 @@ function App() {
                     x={el.x}
                     y={el.y}
                     fill={el.fill}
-                    stroke={el.stroke}
+                    stroke={el.stroke || null}
                     closed={el.closed}
                     draggable
                     onDragEnd={(e) => handleDragEnd(e, String(el.id), 'element')}
@@ -493,6 +592,10 @@ function App() {
             <Transformer
               ref={transformerRef}
               boundBoxFunc={(oldBox, newBox) => {
+                const selectedElement = elements.find(el => String(el.id) === selectedId);
+                if (selectedElement?.type === 'text') {
+                  return oldBox; // Prevent scaling for text
+                }
                 if (newBox.width < 5 || newBox.height < 5) return oldBox;
                 return newBox;
               }}
@@ -557,7 +660,6 @@ function App() {
               </label>
             )}
 
-            {/* New Animation Section */}
             <div className="mt-4">
               <h3 className="font-bold mb-2 text-sm sm:text-base">Animation</h3>
               <label className="block mb-2">
@@ -584,7 +686,6 @@ function App() {
                   <option value="animate__bounce">Bounce</option>
                   <option value="animate__slideInLeft">Slide In Left</option>
                   <option value="animate__zoomIn">Zoom In</option>
-                  {/* Add more Animate.css options as needed */}
                 </select>
               </label>
               <label className="block mb-2">
