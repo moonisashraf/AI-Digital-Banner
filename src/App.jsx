@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Stage, Layer, Rect, Text, Circle, Line, Image, Transformer } from 'react-konva';
+import Konva from 'konva'; // Add this import
 import 'animate.css';
-
 
 function App() {
   const [elements, setElements] = useState([]);
@@ -9,8 +9,6 @@ function App() {
   const [suggestedText, setSuggestedText] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const containerRef = useRef(null);
-  const [stageWidth, setStageWidth] = useState(0);
-  const [stageHeight, setStageHeight] = useState(0);
   const transformerRef = useRef(null);
   const stageRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -19,25 +17,38 @@ function App() {
   const debounceTimeout = useRef(null);
   const [bannerSize, setBannerSize] = useState({ width: 600, height: 400 });
   const [showBorder, setShowBorder] = useState(true);
+  const [zoomLevel, setZoomLevel] = useState(1);
 
   useEffect(() => {
     const updateDimensions = () => {
-      if (containerRef.current) {
+      if (containerRef.current && stageRef.current) {
         const rect = containerRef.current.getBoundingClientRect();
-        setStageWidth(rect.width);
-        setStageHeight(bannerSize.height);
+        const offsetX = (rect.width - bannerSize.width * zoomLevel) / 2;
+        const offsetY = (rect.height - bannerSize.height * zoomLevel) / 2;
+        stageRef.current.x(offsetX > 0 ? offsetX : 0);
+        stageRef.current.y(offsetY > 0 ? offsetY : 0);
+        stageRef.current.scale({ x: zoomLevel, y: zoomLevel });
+        stageRef.current.batchDraw();
       }
     };
     updateDimensions();
     window.addEventListener('resize', updateDimensions);
     return () => window.removeEventListener('resize', updateDimensions);
-  }, [bannerSize]);
+  }, [bannerSize, zoomLevel]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Delete' && selectedId) handleDelete();
       if (e.ctrlKey && e.key === 'z') handleUndo();
       if (e.ctrlKey && e.key === 'y') handleRedo();
+      if (e.ctrlKey && (e.key === '+' || e.key === '=')) {
+        e.preventDefault();
+        setZoomLevel((prev) => Math.min(prev + 0.1, 3));
+      }
+      if (e.ctrlKey && e.key === '-') {
+        e.preventDefault();
+        setZoomLevel((prev) => Math.max(prev - 0.1, 0.5));
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -48,7 +59,6 @@ function App() {
     newHistory.push({ elements: [...newElements], images: [...newImages] });
     setHistory(newHistory);
     setHistoryIndex(newHistory.length - 1);
-    console.log('Saved to history:', newHistory[newHistory.length - 1]);
   };
 
   const handleImageUpload = (e) => {
@@ -62,7 +72,6 @@ function App() {
       const img = new window.Image();
       img.src = event.target.result;
       img.onload = () => {
-        // Calculate size to fit within banner with 20px padding
         const maxWidth = bannerSize.width - 40;
         const maxHeight = bannerSize.height - 40;
         const aspectRatio = img.width / img.height;
@@ -96,8 +105,16 @@ function App() {
   };
 
   const addText = () => {
-    const newElements = [...elements, { id: Date.now(), type: 'text', x: 50, y: 50, text: 'New Text', fontSize: 20, fill: 'black',
-      animation: { type: null, duration: 1, delay: 0, iteration: 1 } }];
+    const newElements = [...elements, { 
+      id: Date.now(), 
+      type: 'text', 
+      x: 20, 
+      y: 20, 
+      text: 'New Text', 
+      fontSize: 20, 
+      fill: 'black',
+      animation: { type: null, duration: 1, delay: 0, iteration: 1 }
+    }];
     setElements(newElements);
     saveToHistory(newElements, images);
   };
@@ -185,7 +202,6 @@ function App() {
     const index = type === 'image' ? images.findIndex((img) => String(img.id) === id) : elements.findIndex((el) => String(el.id) === id);
 
     if (type === 'text') {
-      // Adjust font size instead of scaling
       const scaleX = node.scaleX();
       const newFontSize = Math.round((newElements[index].fontSize || 20) * scaleX);
       newElements[index].fontSize = newFontSize;
@@ -219,7 +235,7 @@ function App() {
   };
 
   const handleStageClick = (e) => {
-    if (e.target === e.target.getStage()) {
+    if (e.target === e.target.getStage() || (e.target instanceof Konva.Rect && e.target.attrs.fill === 'white')) {
       setSelectedId(null);
       if (transformerRef.current) {
         transformerRef.current.nodes([]);
@@ -292,7 +308,6 @@ function App() {
         transformerRef.current.nodes([]);
         transformerRef.current.getLayer().batchDraw();
       }
-      console.log('Undo to:', prevState);
     }
   };
 
@@ -307,7 +322,6 @@ function App() {
         transformerRef.current.nodes([]);
         transformerRef.current.getLayer().batchDraw();
       }
-      console.log('Redo to:', nextState);
     }
   };
 
@@ -334,7 +348,7 @@ function App() {
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
         <style>
           body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background: #fff; }
-          #banner { position: relative; width: ${stageWidth}px; height: ${stageHeight}px; border: 1px solid #000; overflow: hidden; }
+          #banner { position: relative; width: ${bannerSize.width}px; height: ${bannerSize.height}px; border: ${showBorder ? '1px solid #cccccc' : 'none'}; overflow: hidden; }
           .element { position: absolute; }
         </style>
       </head>
@@ -349,9 +363,9 @@ function App() {
               if (el.type === 'text') {
                 return `<div class="element ${animationClass}" style="left: ${el.x}px; top: ${el.y}px; font-size: ${el.fontSize || 20}px; color: ${el.fill || 'black'}; ${animationStyle}">${el.text}</div>`;
               } else if (el.type === 'rect') {
-                return `<div class="element ${animationClass}" style="left: ${el.x}px; top: ${el.y}px; width: ${el.width}px; height: ${el.height}px; background: ${el.fill}; border: 1px solid ${el.stroke || 'black'}; ${animationStyle}"></div>`;
+                return `<div class="element ${animationClass}" style="left: ${el.x}px; top: ${el.y}px; width: ${el.width}px; height: ${el.height}px; background: ${el.fill}; ${el.stroke ? `border: 1px solid ${el.stroke};` : ''} ${animationStyle}"></div>`;
               } else if (el.type === 'circle') {
-                return `<div class="element ${animationClass}" style="left: ${el.x}px; top: ${el.y}px; width: ${el.radius * 2}px; height: ${el.radius * 2}px; background: ${el.fill}; border: 1px solid ${el.stroke || 'black'}; border-radius: 50%; ${animationStyle}"></div>`;
+                return `<div class="element ${animationClass}" style="left: ${el.x}px; top: ${el.y}px; width: ${el.radius * 2}px; height: ${el.radius * 2}px; background: ${el.fill}; ${el.stroke ? `border: 1px solid ${el.stroke};` : ''} border-radius: 50%; ${animationStyle}"></div>`;
               } else if (el.type === 'line') {
                 const points = el.points;
                 let minX = Math.min(points[0], points[2], points[4]);
@@ -363,7 +377,7 @@ function App() {
                 const adjustedPoints = points
                   .map((p, i) => (i % 2 === 0 ? p - minX : p - minY))
                   .join(' ');
-                return `<svg class="element ${animationClass}" style="left: ${el.x + minX}px; top: ${el.y + minY}px; width: ${width}px; height: ${height}px; ${animationStyle}" viewBox="0 0 ${width} ${height}"><polygon points="${adjustedPoints}" style="fill: ${el.fill}; stroke: ${el.stroke || 'black'}; stroke-width: 1;" /></svg>`;
+                return `<svg class="element ${animationClass}" style="left: ${el.x + minX}px; top: ${el.y + minY}px; width: ${width}px; height: ${height}px; ${animationStyle}" viewBox="0 0 ${width} ${height}"><polygon points="${adjustedPoints}" style="fill: ${el.fill}; ${el.stroke ? `stroke: ${el.stroke}; stroke-width: 1;` : ''}" /></svg>`;
               }
               return '';
             })
@@ -390,45 +404,31 @@ function App() {
     document.body.removeChild(link);
   };
 
-  useEffect(() => {
-    elements.forEach((el) => {
-      const node = stageRef.current.findOne(`#${el.id}`);
-      if (node && el.animation?.type) {
-        // For preview, we could use Konva.Tween or custom logic, but Animate.css will shine in export
-        node.cache(); // Optional: Improve performance for animations
-        node.getLayer().batchDraw();
-      }
-    });
-    images.forEach((img) => {
-      const node = stageRef.current.findOne(`#${img.id}`);
-      if (node && img.animation?.type) {
-        node.cache();
-        node.getLayer().batchDraw();
-      }
-    });
-  }, [elements, images]);
-
   return (
-    <div className="flex flex-col lg:flex-row h-screen w-full overflow-x-hidden bg-white">
-      <div className="w-full lg:w-52 bg-gray-200 p-2 sm:p-4 flex flex-col gap-2 sm:gap-4 flex-shrink-0">
+    <div className="flex h-screen w-full overflow-hidden bg-white">
+      <div className="w-52 bg-gray-200 p-4 flex flex-col gap-4 flex-shrink-0">
         <div className="flex flex-col gap-2">
-          <label className="text-sm sm:text-base">Banner Size</label>
-          <select 
-            value={`${bannerSize.width}x${bannerSize.height}`}
-            onChange={(e) => {
-              const [width, height] = e.target.value.split('x').map(Number);
-              setBannerSize({ width, height });
-              setStageWidth(width);
-              setStageHeight(height);
-            }}
-            className="p-1 rounded text-sm sm:text-base"
-          >
-            <option value="600x400">600x400</option>
-            <option value="800x600">800x600</option>
-            <option value="1200x300">1200x300</option>
-            <option value="300x250">300x250</option>
-          </select>
-          <label className="flex items-center gap-2 text-sm sm:text-base">
+          <label className="text-base">Banner Size</label>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              min="100"
+              value={bannerSize.width}
+              onChange={(e) => setBannerSize({ ...bannerSize, width: Number(e.target.value) })}
+              className="w-20 p-1 rounded"
+              placeholder="Width"
+            />
+            <span className="self-center">x</span>
+            <input
+              type="number"
+              min="100"
+              value={bannerSize.height}
+              onChange={(e) => setBannerSize({ ...bannerSize, height: Number(e.target.value) })}
+              className="w-20 p-1 rounded"
+              placeholder="Height"
+            />
+          </div>
+          <label className="flex items-center gap-2 text-base">
             <input 
               type="checkbox" 
               checked={showBorder}
@@ -437,52 +437,20 @@ function App() {
             Show Border
           </label>
         </div>
-        <button onClick={addText} className="bg-blue-500 text-white p-1 sm:p-2 rounded hover:bg-blue-600 text-sm sm:text-base">
-          Add Text
-        </button>
-        <button onClick={handleAddImageClick} className="bg-blue-500 text-white p-1 sm:p-2 rounded hover:bg-blue-600 text-sm sm:text-base">
-          Add Image
-        </button>
+        <button onClick={addText} className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Add Text</button>
+        <button onClick={handleAddImageClick} className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Add Image</button>
         <div className="flex flex-col gap-2">
-          <button onClick={() => addShape('rectangle')} className="bg-blue-500 text-white p-1 sm:p-2 rounded hover:bg-blue-600 text-sm sm:text-base">
-            Add Rectangle
-          </button>
-          <button onClick={() => addShape('circle')} className="bg-blue-500 text-white p-1 sm:p-2 rounded hover:bg-blue-600 text-sm sm:text-base">
-            Add Circle
-          </button>
-          <button onClick={() => addShape('triangle')} className="bg-blue-500 text-white p-1 sm:p-2 rounded hover:bg-blue-600 text-sm sm:text-base">
-            Add Triangle
-          </button>
+          <button onClick={() => addShape('rectangle')} className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Add Rectangle</button>
+          <button onClick={() => addShape('circle')} className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Add Circle</button>
+          <button onClick={() => addShape('triangle')} className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Add Triangle</button>
         </div>
-        <button
-          onClick={handleUndo}
-          disabled={historyIndex <= 0}
-          className="bg-gray-500 text-white p-1 sm:p-2 rounded hover:bg-gray-600 text-sm sm:text-base disabled:opacity-50"
-        >
-          Undo
-        </button>
-        <button
-          onClick={handleRedo}
-          disabled={historyIndex >= history.length - 1}
-          className="bg-gray-500 text-white p-1 sm:p-2 rounded hover:bg-gray-600 text-sm sm:text-base disabled:opacity-50"
-        >
-          Redo
-        </button>
-        <button
-          onClick={handleExportPNG}
-          className="bg-green-500 text-white p-1 sm:p-2 rounded hover:bg-green-600 text-sm sm:text-base"
-        >
-          Export as PNG
-        </button>
-        <button
-          onClick={handleExportHTML}
-          className="bg-green-500 text-white p-1 sm:p-2 rounded hover:bg-green-600 text-sm sm:text-base"
-        >
-          Export as HTML
-        </button>
+        <button onClick={handleUndo} disabled={historyIndex <= 0} className="bg-gray-500 text-white p-2 rounded hover:bg-gray-600 disabled:opacity-50">Undo</button>
+        <button onClick={handleRedo} disabled={historyIndex >= history.length - 1} className="bg-gray-500 text-white p-2 rounded hover:bg-gray-600 disabled:opacity-50">Redo</button>
+        <button onClick={handleExportPNG} className="bg-green-500 text-white p-2 rounded hover:bg-green-600">Export as PNG</button>
+        <button onClick={handleExportHTML} className="bg-green-500 text-white p-2 rounded hover:bg-green-600">Export as HTML</button>
       </div>
 
-      <div ref={containerRef} className="flex-1 bg-white overflow-hidden p-2 sm:p-4">
+      <div ref={containerRef} className="flex-1 bg-gray-100 overflow-auto p-4">
         <Stage
           ref={stageRef}
           width={bannerSize.width}
@@ -594,7 +562,7 @@ function App() {
               boundBoxFunc={(oldBox, newBox) => {
                 const selectedElement = elements.find(el => String(el.id) === selectedId);
                 if (selectedElement?.type === 'text') {
-                  return oldBox; // Prevent scaling for text
+                  return oldBox;
                 }
                 if (newBox.width < 5 || newBox.height < 5) return oldBox;
                 return newBox;
@@ -604,35 +572,34 @@ function App() {
         </Stage>
       </div>
 
-      <div className="w-full lg:w-64 bg-blue-100 p-2 sm:p-4 flex-shrink-0">
-        <h3 className="font-bold mb-1 sm:mb-2 text-sm sm:text-base">AI Suggestions</h3>
-        <button onClick={suggestText} className="bg-blue-500 text-white p-1 sm:p-2 rounded hover:bg-blue-600 text-sm sm:text-base">
-          Suggest Text
-        </button>
+      <div className="w-64 bg-blue-100 p-4 flex-shrink-0 fixed right-0 top-0 h-screen overflow-y-auto">
+        <h3 className="font-bold mb-2 text-base">AI Suggestions</h3>
+        <button onClick={suggestText} className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Suggest Text</button>
         <label className="mt-2 block">
-          <span className="text-sm sm:text-base">Upload Image</span>
+          <span className="text-base">Upload Image</span>
           <input
             type="file"
             accept="image/*"
             onChange={handleImageUpload}
-            className="mt-1 p-1 sm:p-2 text-sm sm:text-base"
+            className="mt-1 p-2"
             ref={fileInputRef}
+            hidden
           />
         </label>
-        {suggestedText && <p className="mt-1 sm:mt-2 text-gray-700 text-sm sm:text-base">Suggestion: "{suggestedText}"</p>}
+        {suggestedText && <p className="mt-2 text-gray-700">Suggestion: "{suggestedText}"</p>}
 
         {selectedId && (
           <div className="mt-4">
-            <h3 className="font-bold mb-2 text-sm sm:text-base">Properties</h3>
+            <h3 className="font-bold mb-2">Properties</h3>
             <button
               onClick={handleDelete}
-              className="bg-red-500 text-white p-1 sm:p-2 rounded hover:bg-red-600 text-sm sm:text-base mb-2"
+              className="bg-red-500 text-white p-2 rounded hover:bg-red-600 mb-2"
             >
               Delete
             </button>
             {!images.some((img) => String(img.id) === selectedId) && (
               <label className="block mb-2">
-                <span className="text-sm sm:text-base">Fill Color</span>
+                <span className="text-base">Fill Color</span>
                 <input
                   type="color"
                   defaultValue={elements.find((el) => String(el.id) === selectedId)?.fill || '#000000'}
@@ -646,7 +613,7 @@ function App() {
             )}
             {elements.find((el) => String(el.id) === selectedId)?.type === 'text' && (
               <label className="block mb-2">
-                <span className="text-sm sm:text-base">Font Size</span>
+                <span className="text-base">Font Size</span>
                 <input
                   type="number"
                   min="10"
@@ -661,9 +628,9 @@ function App() {
             )}
 
             <div className="mt-4">
-              <h3 className="font-bold mb-2 text-sm sm:text-base">Animation</h3>
+              <h3 className="font-bold mb-2">Animation</h3>
               <label className="block mb-2">
-                <span className="text-sm sm:text-base">Animation Type</span>
+                <span className="text-base">Animation Type</span>
                 <select
                   value={
                     (elements.find((el) => String(el.id) === selectedId)?.animation?.type ||
@@ -679,7 +646,7 @@ function App() {
                     });
                     debounceSaveHistory(isImage ? elements : updatedArray, isImage ? updatedArray : images);
                   }}
-                  className="mt-1 w-full p-1 text-sm sm:text-base"
+                  className="mt-1 w-full p-1 text-base"
                 >
                   <option value="">None</option>
                   <option value="animate__fadeIn">Fade In</option>
@@ -689,7 +656,7 @@ function App() {
                 </select>
               </label>
               <label className="block mb-2">
-                <span className="text-sm sm:text-base">Duration (s)</span>
+                <span className="text-base">Duration (s)</span>
                 <input
                   type="number"
                   min="0.1"
@@ -712,7 +679,7 @@ function App() {
                 />
               </label>
               <label className="block mb-2">
-                <span className="text-sm sm:text-base">Delay (s)</span>
+                <span className="text-base">Delay (s)</span>
                 <input
                   type="number"
                   min="0"
@@ -735,7 +702,7 @@ function App() {
                 />
               </label>
               <label className="block mb-2">
-                <span className="text-sm sm:text-base">Iterations</span>
+                <span className="text-base">Iterations</span>
                 <div className="flex gap-2">
                   <input
                     type="number"
