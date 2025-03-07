@@ -1,3 +1,7 @@
+*{
+  box-sizing: border-box;
+}
+
 body, #root {
   background-color: #ffffff;
   margin: 0;
